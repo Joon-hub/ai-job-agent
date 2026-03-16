@@ -1,0 +1,242 @@
+================================================================
+JOB AGENT — HOW TO USE
+================================================================
+
+WHAT THIS PROJECT DOES
+-----------------------
+This is an automated job search agent that runs daily and:
+  1. Scrapes remote job listings from RemoteOK and Indeed
+  2. Scores each job 0-10 based on how well it matches your profile
+  3. Tailors your resume for the top-scoring jobs (score >= 7)
+  4. Generates a daily digest summarising all opportunities
+
+----------------------------------------------------------------
+
+HOW IT WORKS — FLOWCHART
+--------------------------
+
+  +------------------+
+  |   python3        |
+  |   main.py        |
+  +--------+---------+
+           |
+           v
+  +------------------+        .env
+  |   crew.py        |<-------| JOB_TITLES
+  |   (pipeline)     |        | JOB_LOCATION
+  +--------+---------+        | ANTHROPIC_API_KEY
+           |
+           v
+  +------------------+
+  | job_scraper.py   |  scrapes RemoteOK + Indeed RSS
+  | (fetch jobs)     |
+  +--------+---------+
+           |
+           v
+  +------------------+
+  | database.py      |  saves new jobs to jobs.db
+  | (deduplicate)    |  skips already-seen jobs
+  +--------+---------+
+           |
+           v
+  +------------------+
+  | job_searcher.py  |  sends jobs to Claude Haiku
+  | (score 0-10)     |  gets back fit scores + reasons
+  +--------+---------+
+           |
+           +-------------------------------+
+           |                               |
+     score >= 7                       all jobs
+           |                               |
+           v                               v
+  +------------------+           +------------------+
+  | cv_tailor.py     |           | digest_writer.py |
+  | (tailor resume)  |           | (daily summary)  |
+  +--------+---------+           +--------+---------+
+           |                               |
+           v                               v
+  +------------------+           +------------------+
+  | cv_generator.py  |           | outputs/         |
+  | outputs/*.docx   |           | digest_DATE.md   |
+  +------------------+           +------------------+
+
+  SCHEDULER (optional):
+  +------------------+
+  | scheduler.py     |  loops every 60 seconds
+  | 08:00 daily      |---> triggers crew.py pipeline
+  +------------------+
+
+----------------------------------------------------------------
+
+FOLDER STRUCTURE
+----------------
+job-agent/
+  agents/
+    job_searcher.py   — scores jobs using Claude AI
+    cv_tailor.py      — rewrites your resume for each top job
+    digest_writer.py  — writes a daily summary of all jobs
+  tools/
+    job_scraper.py    — scrapes RemoteOK and Indeed RSS feeds
+    database.py       — saves jobs to SQLite so no duplicates
+    cv_generator.py   — exports tailored resumes as .docx files
+  data/
+    jobs.db           — SQLite database (auto-created on first run)
+  outputs/
+    CV_*.docx         — tailored resumes, one per top job
+    digest_YYYY-MM-DD.md — daily job digest
+  resumes/
+    (your master resume goes here)
+  .env                — your API keys and config
+  main.py             — entry point, run this file
+  crew.py             — wires all agents together
+  scheduler.py        — runs the pipeline daily at 8am
+
+----------------------------------------------------------------
+
+STEP 1 — ADD YOUR MASTER RESUME
+---------------------------------
+Create a plain text file inside the resumes/ folder.
+Name it anything, e.g. resume.txt or resume.md
+
+Example format:
+
+  ## Summary
+  Software engineer with 3 years experience in Python and AWS.
+
+  ## Experience
+  ### Backend Engineer @ Acme Corp (2022-2025)
+  - Built REST APIs using FastAPI serving 1M requests/day
+  - Reduced query time by 40% through PostgreSQL optimisation
+
+  ## Skills
+  Python, FastAPI, Django, PostgreSQL, AWS, Docker, Git
+
+  ## Education
+  BSc Computer Science, University of XYZ, 2021
+
+The more detail you add, the better the tailored CVs will be.
+
+----------------------------------------------------------------
+
+STEP 2 — CONFIGURE YOUR SEARCH
+---------------------------------
+Open the .env file and update these values:
+
+  ANTHROPIC_API_KEY=your_key_here       ← already set
+  JOB_TITLES=Software Engineer,Backend Engineer,Python Developer
+  JOB_LOCATION=Remote
+
+  JOB_TITLES: comma-separated list of roles to search for
+  JOB_LOCATION: e.g. Remote, London, New York
+
+Also update the CANDIDATE_PROFILE in crew.py (around line 14).
+This short paragraph tells Claude who you are so it can score jobs.
+Example:
+  "5 years Python experience, Django and FastAPI, AWS certified,
+   looking for senior remote backend roles in fintech or healthtech."
+
+----------------------------------------------------------------
+
+STEP 3 — RUN THE AGENT
+------------------------
+Open a terminal and navigate to the project folder:
+
+  cd /Users/s.joon/Desktop/job_agent/job-agent
+
+Run once (recommended for first test):
+
+  python3 main.py
+
+Run on a schedule (every day at 8am, keeps running):
+
+  python3 main.py --schedule
+
+----------------------------------------------------------------
+
+STEP 4 — READ THE OUTPUTS
+---------------------------
+After each run, check the outputs/ folder:
+
+  digest_YYYY-MM-DD.md
+    Open this in any text editor or Markdown viewer.
+    It contains a ranked table of all jobs found today
+    and the top 3 recommendations with tips.
+
+  CV_CompanyName_JobTitle.docx
+    These are your tailored resumes, one per top job.
+    Open in Microsoft Word or Google Docs.
+    Review before sending — AI output should always be checked.
+
+----------------------------------------------------------------
+
+STEP 5 — WHAT TO DO EVERY DAY
+-------------------------------
+  1. Run: python3 main.py
+  2. Open outputs/digest_<today>.md and read the top picks
+  3. For any job you like, open the matching CV_*.docx file
+  4. Review and edit the tailored CV if needed
+  5. Apply directly using the URL listed in the digest
+
+----------------------------------------------------------------
+
+ADDING EMAIL DIGEST (OPTIONAL)
+--------------------------------
+To receive the digest by email each day:
+  1. Open .env and fill in the email settings:
+       SMTP_HOST=smtp.gmail.com
+       SMTP_PORT=587
+       SMTP_USER=your@gmail.com
+       SMTP_PASS=your_gmail_app_password
+       DIGEST_TO=your@gmail.com
+  2. For Gmail, create an App Password at:
+       myaccount.google.com -> Security -> App Passwords
+  3. Add email sending logic to agents/digest_writer.py
+     (not yet implemented — planned next step)
+
+----------------------------------------------------------------
+
+TROUBLESHOOTING
+----------------
+Problem: "No new jobs to process"
+  → All scraped jobs are already in the database (seen=1)
+  → Delete data/jobs.db to start fresh: rm data/jobs.db
+
+Problem: "Add a master resume to resumes/"
+  → You haven't added your resume yet — see Step 1 above
+
+Problem: AuthenticationError (401)
+  → Your API key in .env is wrong or expired
+  → Get a new key at console.anthropic.com
+
+Problem: SSL warning about LibreSSL
+  → This is a harmless warning on macOS, ignore it
+
+Problem: No jobs found from Indeed
+  → Indeed blocks scrapers intermittently — RemoteOK will still work
+  → The agent uses both sources; partial results are normal
+
+----------------------------------------------------------------
+
+COSTS
+------
+This project uses Claude Haiku (cheapest model) to minimise cost.
+Approximate cost per run:
+  - Scoring 20 jobs:     ~$0.001
+  - Tailoring 3 CVs:     ~$0.003
+  - Writing digest:      ~$0.001
+  Total per day:         ~$0.005 (less than half a cent)
+
+Running daily for a month costs approximately $0.15.
+
+----------------------------------------------------------------
+
+FUTURE IMPROVEMENTS (IDEAS)
+-----------------------------
+  - Add LinkedIn job scraping
+  - Email digest delivery
+  - Track which jobs you applied to (mark applied in DB)
+  - Add cover letter generation
+  - ChromaDB vector search to avoid re-scoring similar jobs
+  - Web dashboard to browse jobs and download CVs
+
+================================================================

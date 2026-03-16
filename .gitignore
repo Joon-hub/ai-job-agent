@@ -1,0 +1,36 @@
+# Secrets
+.env
+.env.local
+.env.production
+
+# Database
+data/jobs.db
+data/*.db
+
+# Outputs (generated files)
+outputs/
+resumes/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+job_agent_env/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Misc
+*.docx
+crewai_job_agent_guide.md
+~$*
