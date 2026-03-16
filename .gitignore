@@ -4,8 +4,9 @@
 .env.production
 
 # Database
-data/jobs.db
-data/*.db
+data/
+**/data/*.db
+**/data/jobs.db
 
 # Outputs (generated files)
 outputs/
